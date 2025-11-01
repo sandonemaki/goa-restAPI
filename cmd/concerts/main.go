@@ -30,13 +30,13 @@ func (m *ConcertsService) List(ctx context.Context, p *genconcerts.ListPayload) 
 }
 
 // 新しいコンサートエントリーを作成
-func (m *ConcertsService) Create(ctx context.Context, p *genconcerts.ConcertPayloadCreatePayload) (*genconcerts.Concert, error) {
+func (m *ConcertsService) Create(ctx context.Context, p *genconcerts.ConcertPayload) (*genconcerts.Concert, error) {
 	newConcert := &genconcerts.Concert{
 		ID:     uuid.New().String(),
-		Artist: p.Artist,
-		Date:   p.Date,
-		Venue:  p.Venue,
-		Price:  p.Price,
+		Artist: *p.Artist,
+		Date:   *p.Date,
+		Venue:  *p.Venue,
+		Price:  *p.Price,
 	}
 	m.concerts = append(m.concerts, newConcert)
 	return newConcert, nil

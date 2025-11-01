@@ -1,10 +1,11 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
+	"context"
 
 	"github.com/google/uuid"
 	goahttp "goa.design/goa/v3/http"
@@ -12,6 +13,8 @@ import (
 	// 生成されたパッケージにはgenプレフィックスを使用
 	genconcerts "concerts/gen/concerts"
 	genhttp "concerts/gen/http/concerts/server"
+
+	"github.com/vmihailenco/msgpack/v5"
 )
 
 // ConcertsServiceはgenconcerts.Serviceインターフェースを実装
@@ -87,6 +90,37 @@ func (m *ConcertsService) Delete(ctx context.Context, p *genconcerts.DeletePaylo
 	return genconcerts.MakeNotFound(fmt.Errorf("concert not found: %s", p.ConcertID))
 }
 
+type (
+	// MessagePackエンコーダーの実装
+	msgpackEnc struct {
+		w http.ResponseWriter
+	}
+
+	// MessagePackデコーダーの実装
+	msgpackDec struct {
+		r *http.Request
+	}
+)
+
+// カスタムエンコーダーコンストラクタ - MessagePackエンコーダーを作成
+func msgpackEncoder(ctx context.Context, w http.ResponseWriter) goahttp.Encoder {
+	return &msgpackEnc{w: w}
+}
+
+func (e *msgpackEnc) Encode(v any) error {
+	e.w.Header().Set("Content-Type", "application/msgpack")
+	return msgpack.NewEncoder(e.w).Encode(v)
+}
+
+// カスタムデコーダーコンストラクタ - 受信するMessagePackデータを処理
+func msgpackDecoder(r *http.Request) goahttp.Decoder {
+	return &msgpackDec{r: r}
+}
+
+func (d *msgpackDec) Decode(v any) error {
+	return msgpack.NewDecoder(d.r.Body).Decode(v)
+}
+
 // mainはサービスをインスタンス化し、HTTPサーバーを起動します
 func main() {
 	// サービスのインスタンス化
@@ -97,9 +131,45 @@ func main() {
 
 	// HTTPハンドラーの構築
 	mux := goahttp.NewMuxer()
-	requestDecoder := goahttp.RequestDecoder
-	responseEncoder := goahttp.ResponseEncoder
-	handler := genhttp.New(endpoints, mux, requestDecoder, responseEncoder, nil, nil)
+
+	// クライアントの要望（Acceptヘッダー）に基づくスマートなエンコーダー選択
+	encodeFunc := func(ctx context.Context, w http.ResponseWriter) goahttp.Encoder {
+		accept := ctx.Value(goahttp.AcceptTypeKey).(string)
+
+		// q値を含む複数のタイプを含むAcceptヘッダーを解析
+		// 例：「application/json;q=0.9,application/msgpack」
+		types := strings.Split(accept, ",")
+		for _, t := range types {
+			mt := strings.TrimSpace(strings.Split(t, ";")[0])
+			switch mt {
+			case "application/msgpack":
+				return msgpackEncoder(ctx, w)
+			case "application/json", "*/*":
+				return goahttp.ResponseEncoder(ctx, w)
+			}
+		}
+
+		// 迷ったときは、JSONが味方です！
+		return goahttp.ResponseEncoder(ctx, w)
+	}
+
+	// クライアントが送信するもの（Content-Type）に基づくスマートなデコーダー選択
+	decodeFunc := func(r *http.Request) goahttp.Decoder {
+		if r.Header.Get("Content-Type") == "application/msgpack" {
+			return msgpackDecoder(r)
+		}
+		return goahttp.RequestDecoder(r)
+	}
+
+	// カスタムエンコーダー/デコーダーを接続
+	handler := genhttp.New(
+		endpoints,
+		mux,
+		decodeFunc,
+		encodeFunc,
+		nil,
+		nil,
+	)
 
 	// ハンドラーをmuxにマウント
 	genhttp.Mount(mux, handler)

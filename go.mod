@@ -4,6 +4,7 @@ go 1.25.3
 
 require (
 	github.com/google/uuid v1.6.0
+	github.com/vmihailenco/msgpack/v5 v5.4.1
 	goa.design/goa/v3 v3.22.6
 )
 
@@ -16,6 +17,7 @@ require (
 	github.com/manveru/faker v0.0.0-20171103152722-9fbc68a78c4d // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
+	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	golang.org/x/mod v0.29.0 // indirect
 	golang.org/x/sync v0.17.0 // indirect
 	golang.org/x/text v0.30.0 // indirect
